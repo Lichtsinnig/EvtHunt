@@ -1,0 +1,5 @@
+function dateparser {
+                     param ($dt)
+                     # формат даты 2019-12-01 12:11
+                     return(([datetime]::parseexact($dt, 'yyyy-MM-dd HH:mm', $null)).ToString('yyyy-MM-ddTHH:mm:ss.fffZ'))
+                    }
