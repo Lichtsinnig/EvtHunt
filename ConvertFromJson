@@ -1,0 +1,6 @@
+Add-Type -AssemblyName System.Web.Extensions
+
+function ConvertFrom-Json([object] $item){  
+    $ps_js=new-object system.web.script.serialization.javascriptSerializer 
+    return ,$ps_js.DeserializeObject($item) 
+}
