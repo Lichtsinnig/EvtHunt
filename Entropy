@@ -1,0 +1,32 @@
+function Get-Entropy {
+                            param($Content)
+                            $characterMap = @{}
+                            $objs=@()
+                            ($content -replace '(?s)<#.*?#>','' -replace '#.*','' -replace '\s','').ToCharArray() | %{
+                                                                                                                       $key = $_.ToString().ToUpper()
+                                                                                                                       $characterMap[$key] = 1 + $characterMap[$key] }
+
+                            $total = ($characterMap.GetEnumerator() | Measure-Object -sum Value).Sum
+                            $characterMap.GetEnumerator() | Sort-Object -desc value | % {
+                            $name=$_.Name
+                         
+                            $val=([Math]::Round($_.Value / $total * 100, 3)).tostring()
+                            
+                            $obj = New-Object -TypeName PSObject
+                            $obj|Add-Member -MemberType NoteProperty -Name Key -Value $name
+                            $obj|Add-Member -MemberType NoteProperty -Name Val -Value $val
+                            $objs+=$obj
+                            }
+                            return($objs)
+                      }
+
+function Get-EntropyMaxChar {
+                             param($Content)
+                             $ent_obj=Get-Entropy -Content $Content
+                             $ent_max=($ent_obj| %{$_.val |Sort-Object -Descending})[0]
+                             $char=($ent_obj|?{$_.val -eq $ent_max}|%{$_.key}) -join ","
+                             return($char)
+
+}
+
+Get-EntropyMaxChar -Content "vvvaryhlkkmm.k"
