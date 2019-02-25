@@ -1,0 +1,6 @@
+function LengthText {
+                        param($text)
+                        ([regex]::match($text, ".+")).Length
+                     }
+                     
+LengthText -text "aGVsbG8gd29ybGQ="
