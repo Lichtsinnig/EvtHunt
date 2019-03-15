@@ -8,7 +8,9 @@ function evt_to_obj {
                                 EventID = $evt.Event.System.EventID; 
                                 Channel = $evt.Event.System.Channel; 
                                 Computer = $evt.Event.System.Computer; 
-                                TimeCreated = $evt.Event.System.TimeCreated.SystemTime} 
+                                TimeCreated = $evt.Event.System.TimeCreated.SystemTime;
+                                RecID = $evt.Event.System.EventRecordID
+                                } 
                                                                          
                     $prop = $evt.Event.EventData.Data| %{$_.Name}
                     foreach($iprop in $prop){ 
