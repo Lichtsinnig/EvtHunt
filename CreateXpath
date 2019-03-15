@@ -10,6 +10,7 @@ function create_xpath {
                                 [Parameter(Position=1)]
                                 [ValidateSet('Application','Setup','System','Security', 'PS', 'TSLocalSession','TSRemoteConnection', 'WMI')]
                                 [System.String]$Log,
+                                $RecID=$null,
                                 [Parameter(Position=2)]
                                 [array]$id,
                                 [Parameter(Position=3)]
@@ -19,6 +20,7 @@ function create_xpath {
                                 [int[]]$lastNMin=$null,
                                 [int[]]$lastNHour=$null,
                                 [int[]]$lastNDay=$null
+                                
                                 # обязательные поля logname и id
                                 # Применяются блоки starttime-endtime или lastn*
                                 # create_xpath  -log system -id 23 -starttime '2019-12-01 12:11'
@@ -66,10 +68,13 @@ function create_xpath {
                                    } 
                     } 
       
+            $tmp_RecID=''
+            if($RecID){$tmp_RecID = (' and EventRecordID > {0}' -f $RecID)}
                     
-                    return( ('<QueryList><Query Id="0" Path="{0}"><Select Path="{0}">*[System[{1}]]</Select></Query></QueryList>' -f $ObjLogName, ($TM_a -join " and " )))
+            return( ('<QueryList><Query Id="0" Path="{0}"><Select Path="{0}">*[System[{1}{2}]]</Select></Query></QueryList>' -f $ObjLogName, ($TM_a -join " and " ),$tmp_RecID))
                                              
 }
 
-$q_xpath = create_xpath  -log system -id 10148 -lastNMin 600000
-Get-WinEvent -FilterXml  $q_xpath |fl *
+$q_xpath = create_xpath  -log security -id 4624 -lastNMin 60 -RecID 62678
+$q_xpath
+Get-WinEvent -FilterXml  $q_xpath |ft
