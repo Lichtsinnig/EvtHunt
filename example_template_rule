@@ -1,0 +1,97 @@
+Json model
+
+{
+  "Name": "RuleName",
+  "Severity": "0..4 low, med, hi, critical",
+  "Tags": [
+    {
+      "Comment": "",
+      "Tactics": [
+        "Privilege Escalation"
+      ],
+      "Mitre": [
+        "t73",
+        "t75"
+      ],
+      "Other": "",
+      "Author": ""
+    }
+  ],
+  "Meta": [
+    {
+      "EventID": [
+        "23",
+        "24"
+      ],
+      "Channel": "Application,Setup,System,Security,PS,TSLocalSession,TSRemConnect,WMI"
+    }
+  ],
+  "Matches": [
+    {
+      "pattern1": {
+        "FieldName": "ParentImage",
+        "Condition": "match",
+        "Patern": ""
+      },
+      "pattern2": {
+        "FieldName": "ParentImage",
+        "Condition": ">",
+        "Patern": ""
+      },
+      "pattern3": {
+        "FieldName": "ParentImage",
+        "Condition": "<",
+        "Patern": ""
+      },
+      "pattern4": {
+        "FieldName": "ParentImage",
+        "Condition": "=",
+        "Patern": ""
+      },
+      "pattern5": {
+        "FieldName": "ParentImage",
+        "Condition": "!=",
+        "Patern": ""
+      }
+    }
+  ],
+  "RuleCondition": "(pattern1 and !(pattern2)) or pattern3"
+}
+
+
+Yaml model
+
+Tags[]
+  Comment = 
+  Tactics[] s = Privilege Escalation	
+  Mitre[] s = t73,t75
+  Other =
+  Author =
+
+Meta[]
+  EventID[] s = 23,24
+  Channel= Application,Setup,System,Security,PS,TSLocalSession,TSRemConnect,WMI
+
+Matches[]
+  pattern1
+    FieldName = ParentImage
+    Condition = match
+    Patern =
+  pattern2
+    FieldName = ParentImage
+    Condition = >
+    Patern =
+  pattern3
+    FieldName = ParentImage
+    Condition = <
+    Patern =
+  pattern4
+    FieldName = ParentImage
+    Condition = =
+    Patern =
+  pattern5
+    FieldName = ParentImage
+    Condition = !=
+    Patern =
+
+RuleCondition = (pattern1 and !(pattern2)) or pattern3
