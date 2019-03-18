@@ -1,0 +1,279 @@
+#############################################
+# Function
+#############################################
+
+
+
+Add-Type -AssemblyName System.Web.Extensions
+
+
+
+function Check-Obfuscation {
+#Скрипт основан на вычислении Энтропии
+                            param($Content)
+                            $RequiredSimilarity = 0.8
+                            $characterMap = @{}
+                            $Set1 = @{'E'=9.818; 'T'=7.471;'A'=5.575;'R'=5.464;'S'=5.316;'I'=5.123;'N'=5.066;'O'=5.059;'L'=3.575;'C'=3.253;'M'=3.201;'$'=3.111;'P'=2.875;'D'=2.799;'U'=2.315;'-'=1.932;'.'=1.917;'"'=1.798;'F'=1.696;'G'=1.542;'B'=1.493;'H'=1.474;'='=1.342;'('=1.336;')'=1.33;'Y'=1.193;'W'=1.173;'V'=0.902;'{'=0.771;'}'=0.766;','=0.655;'X'=0.651;'['=0.621;']'=0.62;"'"=0.587;'_'=0.538;':'=0.483;'K'=0.453;'0'=0.45;'/'=0.432;'J'=0.345;'1'=0.316;'+'=0.27;'2'=0.245;'|'=0.238;';'=0.23;'\'=0.222;'Q'=0.218;'>'=0.196;'<'=0.185;'Z'=0.154;'3'=0.133;'*'=0.128;'`'=0.122;'5'=0.114;'4'=0.103;'@'=0.092;'6'=0.087;'8'=0.076;'7'=0.067;'%'=0.063;'9'=0.061;'!'=0.045;'?'=0.035;'&'=0.027}
+                            $Set1 = $Set1.GetEnumerator() | Sort-Object -desc value | % {[PSCustomObject] @{ Name = $_.Name; Percent = $_.Value}}
+
+                            
+                            ($content -replace '(?s)<#.*?#>','' -replace '#.*','' -replace '\s','').ToCharArray() | %{
+                                                                                                                       $key = $_.ToString().ToUpper()
+                                                                                                                       $characterMap[$key] = 1 + $characterMap[$key] }
+
+                            $total = ($characterMap.GetEnumerator() | Measure-Object -sum Value).Sum
+                            $set2 =$characterMap.GetEnumerator() | Sort-Object -desc value | % {
+                            [PSCustomObject] @{ Name = $_.Name; Percent = [Math]::Round($_.Value / $total * 100, 3)}}
+                            
+
+                            $allkeys = @($Set1) + @($Set2) | % {$_.Name }| Sort-Object -Unique
+
+                            $set1Hash = @{}
+                            $set2Hash = @{}
+                            $setsToProcess = @($Set1, $Set1Hash), @($Set2, $Set2Hash)
+
+                            foreach($set in $setsToProcess){
+                                                            $set[0] | % {$set[1][$_.Name] = $_.Percent}
+                                                            }
+
+                            $dot = 0
+                            $mag1 = 0
+                            $mag2 = 0
+
+                            foreach($key in $allkeys){
+                                                      $dot += $set1Hash[$key] * $set2Hash[$key]
+                                                      $mag1 +=  ($set1Hash[$key] * $set1Hash[$key])
+                                                      $mag2 +=  ($set2Hash[$key] * $set2Hash[$key])
+                                                     }
+
+                            $mag1 = [Math]::Sqrt($mag1)
+                            $mag2 = [Math]::Sqrt($mag2)
+
+    
+                            $rez = [Math]::Round($dot / ($mag1 * $mag2), 3)
+                            
+                            $IsObfuscated = $False
+                            if($rez -lt $RequiredSimilarity) {
+                                                              $IsObfuscated = $True
+                                                              }
+                            return($IsObfuscated)
+                           
+
+}
+
+                          
+
+#Check-Obfuscation -Content ""
+
+function ConvertFrom-Json([object] $item){  
+    $ps_js=new-object system.web.script.serialization.javascriptSerializer 
+    return ,$ps_js.DeserializeObject($item) 
+}
+
+function ConvertTo-Json([object] $item){ 
+    $ps_js=new-object system.web.script.serialization.javascriptSerializer 
+    return $ps_js.Serialize($item) 
+}
+
+function dateparser {
+                     param ($dt)
+                     # формат даты 2019-12-01 12:11
+                     return(([datetime]::parseexact($dt, 'yyyy-MM-dd HH:mm', $null)).ToString('yyyy-MM-ddTHH:mm:ss.fffZ'))
+                    }
+
+
+function create_xpath {
+                        param (
+                                [Parameter(Position=1)]
+                                [ValidateSet('Application','Setup','System','Security', 'PS', 'TSLocalSession','TSRemoteConnection', 'WMI')]
+                                [System.String]$Log,
+                                $RecID=$null,
+                                [Parameter(Position=2)]
+                                [array]$id,
+                                [Parameter(Position=3)]
+                                $starttime=$null,
+                                $endtime=$null,
+                                [Parameter(Position=4)]
+                                [int[]]$lastNMin=$null,
+                                [int[]]$lastNHour=$null,
+                                [int[]]$lastNDay=$null
+                                
+                                # обязательные поля logname и id
+                                # Применяются блоки starttime-endtime или lastn*
+                                # create_xpath  -log system -id 23 -starttime '2019-12-01 12:11'
+                                # create_xpath  -log system -id 23 -starttime '2019-12-01 12:10' -endtime '2019-12-01 12:20'
+                                # create_xpath  -log system -id 23 -lastNMin 10
+                                # формат даты 2019-12-01 12:11
+
+                                )
+ 
+            $TM_a=@()
+            $TM_a+="(EventID=" +($id -join " or EventID=") + ")"                    
+            Switch ($log) { 
+                         'Application'{$ObjLogName = "Application"}   
+                         'Setup' {$ObjLogName = "Setup"}  
+                         'System' {$ObjLogName = "System"} 
+                         'Security' {$ObjLogName = "Security"}    
+                         'PS' {$ObjLogName = "Microsoft-Windows-PowerShell/Operational"} 
+                         'TSLocalSession' {$ObjLogName = "Microsoft-Windows-TerminalServices-LocalSessionManager/Operational"} 
+                         'TSRemoteConnection' {$ObjLogName = "Microsoft-Windows-TerminalServices-RemoteConnectionManager/Operational"} 
+                         'WMI' {$ObjLogName = "Microsoft-Windows-WMI-Activity/Operational"} 
+                          }
+            if ($starttime){
+                            $lastNMin=$null
+                            $lastNHour=$null
+                            $lastNDay=$null
+                            if($endtime){$TM_a += "TimeCreated[@SystemTime&gt;='{0}' and @SystemTime&lt;='{1}']" -f (dateparser -dt $starttime),(dateparser -dt $endtime)}
+                            else {$TM_a += "TimeCreated[@SystemTime&lt;='{0}']" -f (dateparser -dt $starttime)}
+                           
+                            }
+            else {
+                    if ($lastNMin){$lastNHour= $null
+                                   $lastNDay=$null
+                                   #$lastNMin_s=60*1000*$lastNMin
+                                   $TM_a += "TimeCreated[timediff(@SystemTime) &lt;= {0}]" -f (60*1000*[convert]::ToInt32($lastNMin,10))
+                                   }
+                    if ($lastNHour){$lastNMin=$null
+                                    $lastNDay=$null
+                                    #$lastNHour_s=60*60*1000*$lastNHour
+                                    $TM_a += "TimeCreated[timediff(@SystemTime) &lt;= {0}]" -f (60*60*1000*[convert]::ToInt32($lastNHour,10))
+                                    }
+                    if ($lastNDay){$lastNMin= $null
+                                   $lastNHour= $null
+                                   #$lastNDay_s=60*60*24*1000*$lastNDay
+                                   $TM_a += "TimeCreated[timediff(@SystemTime) &lt;= {0}]" -f (60*60*24*1000*[convert]::ToInt32($lastNDay,10))
+                                   } 
+                    } 
+      
+            $tmp_RecID=''
+            if($RecID){$tmp_RecID = (' and EventRecordID > {0}' -f $RecID)}
+                    
+            return( ('<QueryList><Query Id="0" Path="{0}"><Select Path="{0}">*[System[{1}{2}]]</Select></Query></QueryList>' -f $ObjLogName, ($TM_a -join " and " ),$tmp_RecID))
+                                             
+}
+
+#$q_xpath = create_xpath  -log security -id 4624 -lastNMin 60 -RecID 62678
+#$q_xpath
+#Get-WinEvent -FilterXml  $q_xpath |ft
+
+function Get-Entropy {
+                            param($Content)
+                            $characterMap = @{}
+                            $objs=@()
+                            ($content -replace '(?s)<#.*?#>','' -replace '#.*','' -replace '\s','').ToCharArray() | %{
+                                                                                                                       $key = $_.ToString().ToUpper()
+                                                                                                                       $characterMap[$key] = 1 + $characterMap[$key] }
+
+                            $total = ($characterMap.GetEnumerator() | Measure-Object -sum Value).Sum
+                            $characterMap.GetEnumerator() | Sort-Object -desc value | % {                            
+                                                                                        $objs+= CreateObj -key $_.Name -val (([Math]::Round($_.Value / $total * 100, 3)).tostring())
+                                                                                        }
+                            return($objs)
+                      }
+
+function Get-EntropyMaxChar {
+                             param($Content)
+                             $ent_obj=Get-Entropy -Content $Content
+                             $ent_max=($ent_obj| %{$_.val |Sort-Object -Descending})[0]
+                             $char=($ent_obj|?{$_.val -eq $ent_max}|%{$_.key}) -join ","
+                             return($char)
+
+}
+
+#Get-EntropyMaxChar -Content "vvvaryhlkkmm.k"
+
+function evt_to_obj {
+                    Param( 
+                          [parameter(mandatory=$true)]$data 
+                           )
+                 
+                    $evt=[xml]$data.toxml()
+                    $FData = @{ 
+                                EventID = $evt.Event.System.EventID; 
+                                Channel = $evt.Event.System.Channel; 
+                                Computer = $evt.Event.System.Computer; 
+                                TimeCreated = $evt.Event.System.TimeCreated.SystemTime
+                                
+                                } 
+                                                                         
+                    $prop = $evt.Event.EventData.Data| %{$_.Name}
+                    foreach($iprop in $prop){ 
+                                             $Fdata[$iprop] = $evt.SelectSingleNode("//*[name()='EventData']/*[@Name='$iprop']").'#text'
+                                             }
+                                             
+                    return($Fdata)
+
+}
+
+#Get-WinEvent -LogName security -MaxEvents 1 | %{evt_to_obj -data $_} | %{ConvertTo-Json $_}
+
+function LengthText {
+                        param($text)
+                        ([regex]::match($text, ".+")).Length
+                     }
+                     
+#LengthText -text "aGVsbG8gd29ybGQ="
+
+function GetRule2Obj {
+                        param ($path)
+                        # путь к каталогу где хранятся правила c:\rules
+                        if(Test-Path $path){
+                                            if(([regex]::Match($path,"\\$")).Success -eq $false){$path=$path+"\"}
+                                            return ((Get-ChildItem -path 'C:\Rules\*.*' -Recurse | %{ConvertFrom-Json -item (Get-Content -path $_.FullName)}))
+                                           } 
+                  
+                        else{return "error"}                    
+
+
+}
+#GetRule2Obj -path c:\rules
+
+function CreateObj {
+                    param(
+                          $key_name="Key",
+                          $key,
+                          $val_name="Val",
+                          $val
+                            )
+                            
+                    $obj = New-Object -TypeName PSObject
+                    $obj|Add-Member -MemberType NoteProperty -Name $key_name -Value $key
+                    $obj|Add-Member -MemberType NoteProperty -Name $val_name -Value $val
+                    return $obj
+}
+
+
+#function GetLastPosition {param()}
+
+
+function core {
+              param(
+              #Путь к папке с правилами
+              $RulesFolder,
+              #Параметры для формирования xpath
+              $xp_StartTime=$null,
+              $xp_EndTime=$null,
+              $xp_LastNMin=$null,
+              $xp_LastNHour=$null,
+              $xp_LastNDay=$null,
+              
+                    )
+              #Проверяем как будем проводить выборку: по последней позиции или за промежуток времени
+              $LastPosirion="RecID"
+              if(($xp_StartTime -or $xp_EndTime -or $xp_LastNMin -or $xp_LastNHour -or $xp_LastNDay) -ne $null){$LastPosirion="DT"}else{$LastPosirion="RecID"}
+
+              $RulesObj = GetRule2Obj -path $RulesFolder
+              
+              # сортируем правила для первичной выборки log-eventid
+              # создаем объект с уникальными значениями
+              
+              $xpf=@()
+              
+              foreach($irulesObj in $rulesObj){$irulesObj | %{$_.EventID} |% { $xpf+=CreateObj -key $irulesObj.Channel -val $_}}
+              $xpf | sort-object key, val -Unique | Group-Object key | %{create_xpath -Log $_.name -id ($_.group| %{$_.val})
+                                                                          
+                                                                         }
+               
+}
+
+core -rulepath c:\rules
