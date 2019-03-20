@@ -2,13 +2,12 @@
 # Function
 #############################################
 
-
-
 Add-Type -AssemblyName System.Web.Extensions
 
-
-
-function Check-Obfuscation {
+############################
+# Функции проверки контента
+############################
+function Core_CheckObfuscation {
 #Скрипт основан на вычислении Энтропии
                             param($Content)
                             $RequiredSimilarity = 0.8
@@ -61,31 +60,93 @@ function Check-Obfuscation {
 
 }
 
-                          
+# Core_CheckObfuscation -Content ""
 
-#Check-Obfuscation -Content ""
+function Core_GetRate {
+                            param($Content)
+                            $characterMap = @{}
+                            $objs=@()
+                            ($content -replace '(?s)<#.*?#>','' -replace '#.*','' -replace '\s','').ToCharArray() | %{
+                                                                                                                       $key = $_.ToString().ToUpper()
+                                                                                                                       $characterMap[$key] = 1 + $characterMap[$key] }
 
-function ConvertFrom-Json([object] $item){  
-    $ps_js=new-object system.web.script.serialization.javascriptSerializer 
-    return ,$ps_js.DeserializeObject($item) 
+                            $total = ($characterMap.GetEnumerator() | Measure-Object -sum Value).Sum
+                            $characterMap.GetEnumerator() | Sort-Object -desc value | % {                            
+                                                                                        $objs+= Core_CreateNewObj -key $_.Name -val (([Math]::Round($_.Value / $total * 100, 3)).tostring())
+                                                                                        }
+                            return($objs)
+                      }
+                      
+#Core_GetRate -Content 'asdfghhhjkl'
+                                            
+                      
+function Core_GetRateMaxChar {
+                             param($Content)
+                             $ent_obj=Core_GetEntropy -Content $Content
+                             $ent_max=($ent_obj| %{$_.val |Sort-Object -Descending})[0]
+                             $char=($ent_obj|?{$_.val -eq $ent_max}|%{$_.key}) -join ","
+                             return($char)
+
 }
 
-function ConvertTo-Json([object] $item){ 
+#Core_GetRateMaxChar -Content "asdfghhjklll"
+                      
+function Core_GetLengthContent {
+                        param($text)
+                        return(([regex]::match($text, ".+")).Length)
+                     }
+                     
+#Core_GetLengthContent -text "aGVsbG8gd29ybGQ="
+
+
+###############################
+#  функции конвертирования данных
+###############################
+
+# JSON
+
+function Core_ConvertFromJson([object] $item){  
     $ps_js=new-object system.web.script.serialization.javascriptSerializer 
-    return $ps_js.Serialize($item) 
+    return($ps_js.DeserializeObject($item))
 }
 
-function dateparser {
-                     param ($dt)
-                     # формат даты 2019-12-01 12:11
-                     return(([datetime]::parseexact($dt, 'yyyy-MM-dd HH:mm', $null)).ToString('yyyy-MM-ddTHH:mm:ss.fffZ'))
-                    }
+function Core_ConvertToJson([object] $item){ 
+    $ps_js=new-object system.web.script.serialization.javascriptSerializer 
+    return($ps_js.Serialize($item) )
+}
 
+function Core_DTParser{
+                       param ($dt)
+                       # формат даты 2019-12-01 12:11
+                       return(([datetime]::parseexact($dt, 'yyyy-MM-dd HH:mm', $null)).ToString('yyyy-MM-ddTHH:mm:ss.fffZ'))
+                       }
 
-function create_xpath {
+#####################################
+# функция->объект
+#####################################
+
+function  Core_CreateNewObj {
+                             param(
+                             $key_name="Key",
+                             $key,
+                             $val_name="Val",
+                             $val
+                             )
+                            
+                             $obj = New-Object -TypeName PSObject
+                             $obj|Add-Member -MemberType NoteProperty -Name $key_name -Value $key
+                             $obj|Add-Member -MemberType NoteProperty -Name $val_name -Value $val
+                             return $obj
+}
+
+######################################
+# Xpath
+######################################
+
+function Core_CreateXpath {
                         param (
                                 [Parameter(Position=1)]
-                                [ValidateSet('Application','Setup','System','Security', 'PS', 'TSLocalSession','TSRemoteConnection', 'WMI')]
+                                #[ValidateSet('Application','Setup','System','Security', 'PS', 'TSLocalSession','TSRemoteConnection', 'WMI')]
                                 [System.String]$Log,
                                 $RecID=$null,
                                 [Parameter(Position=2)]
@@ -106,81 +167,89 @@ function create_xpath {
                                 # формат даты 2019-12-01 12:11
 
                                 )
- 
-            $TM_a=@()
-            $TM_a+="(EventID=" +($id -join " or EventID=") + ")"                    
-            Switch ($log) { 
-                         'Application'{$ObjLogName = "Application"}   
-                         'Setup' {$ObjLogName = "Setup"}  
-                         'System' {$ObjLogName = "System"} 
-                         'Security' {$ObjLogName = "Security"}    
-                         'PS' {$ObjLogName = "Microsoft-Windows-PowerShell/Operational"} 
-                         'TSLocalSession' {$ObjLogName = "Microsoft-Windows-TerminalServices-LocalSessionManager/Operational"} 
-                         'TSRemoteConnection' {$ObjLogName = "Microsoft-Windows-TerminalServices-RemoteConnectionManager/Operational"} 
-                         'WMI' {$ObjLogName = "Microsoft-Windows-WMI-Activity/Operational"} 
-                          }
-            if ($starttime){
-                            $lastNMin=$null
-                            $lastNHour=$null
-                            $lastNDay=$null
-                            if($endtime){$TM_a += "TimeCreated[@SystemTime&gt;='{0}' and @SystemTime&lt;='{1}']" -f (dateparser -dt $starttime),(dateparser -dt $endtime)}
-                            else {$TM_a += "TimeCreated[@SystemTime&lt;='{0}']" -f (dateparser -dt $starttime)}
-                           
-                            }
-            else {
-                    if ($lastNMin){$lastNHour= $null
-                                   $lastNDay=$null
-                                   #$lastNMin_s=60*1000*$lastNMin
-                                   $TM_a += "TimeCreated[timediff(@SystemTime) &lt;= {0}]" -f (60*1000*[convert]::ToInt32($lastNMin,10))
-                                   }
-                    if ($lastNHour){$lastNMin=$null
-                                    $lastNDay=$null
-                                    #$lastNHour_s=60*60*1000*$lastNHour
-                                    $TM_a += "TimeCreated[timediff(@SystemTime) &lt;= {0}]" -f (60*60*1000*[convert]::ToInt32($lastNHour,10))
-                                    }
-                    if ($lastNDay){$lastNMin= $null
-                                   $lastNHour= $null
-                                   #$lastNDay_s=60*60*24*1000*$lastNDay
-                                   $TM_a += "TimeCreated[timediff(@SystemTime) &lt;= {0}]" -f (60*60*24*1000*[convert]::ToInt32($lastNDay,10))
-                                   } 
-                    } 
-      
-            $tmp_RecID=''
-            if($RecID){$tmp_RecID = (' and EventRecordID > {0}' -f $RecID)}
-                    
-            return( ('<QueryList><Query Id="0" Path="{0}"><Select Path="{0}">*[System[{1}{2}]]</Select></Query></QueryList>' -f $ObjLogName, ($TM_a -join " and " ),$tmp_RecID))
-                                             
+                                $q=@()
+                                $WorkLog = "Application","Setup","System","Security","Microsoft-Windows-PowerShell/Operational","Microsoft-Windows-TerminalServices-LocalSessionManager/Operational","Microsoft-Windows-TerminalServices-RemoteConnectionManager/Operational","Microsoft-Windows-WMI-Activity/Operational"
+                                if($WorkLog -contains $Log){
+                                if($RecID -ne $null){$RecID = (' and EventRecordID > {0}' -f $RecID)}
+                                $TimeFilter = $null
+                                if($starttime -ne $null){
+                                                        $lastNMin = $null
+                                                        $lastNHour = $null
+                                                        $lastNDay = $null
+                                                        if($endtime -ne $null){$TimeFilter="TimeCreated[@SystemTime&gt;='{0}' and @SystemTime&lt;='{1}']" -f (Core_DTParser -dt $starttime),(Core_DTParser -dt $endtime)}
+                                                        else{$TimeFilter = " and TimeCreated[@SystemTime&lt;='{0}']" -f (Core_DTParser -dt $starttime)}
+                                                        }
+                                else {
+                                        if ($lastNMin -ne $null){$TimeFilter = " and TimeCreated[timediff(@SystemTime) &lt;= {0}]" -f (60*1000*[convert]::ToInt32($lastNMin,10))
+                                                                 $lastNHour = $null
+                                                                 $lastNDay = $null
+                                                                 break
+                                                                 }
+                                        if ($lastNHour){$lastNMin = $null
+                                                        $TimeFilter = " and TimeCreated[timediff(@SystemTime) &lt;= {0}]" -f (60*60*1000*[convert]::ToInt32($lastNHour,10))
+                                                        $lastNDay = $null
+                                                        break
+                                                        }
+                                        if ($lastNDay){$lastNMin = $null
+                                                       $lastNHour = $null
+                                                       $TimeFilter = " and TimeCreated[timediff(@SystemTime) &lt;= {0}]" -f (60*60*24*1000*[convert]::ToInt32($lastNDay,10))
+                                                       break
+                                                      } 
+                                      }
+                                      
+                                
+                                $id| %{$q+=('<QueryList><Query Id="0" Path="{0}"><Select Path="{0}">*[System[(EventID={1}){2}{3}]]</Select></Query></QueryList>' -f $Log,$_, $TimeFilter,$RecID)}
+                                
+                                }
+                                else {return "error"}
+return($q)                                             
 }
 
-#$q_xpath = create_xpath  -log security -id 4624 -lastNMin 60 -RecID 62678
-#$q_xpath
-#Get-WinEvent -FilterXml  $q_xpath |ft
+Core_CreateXpath -Log security -id 4624,4625  
 
-function Get-Entropy {
-                            param($Content)
-                            $characterMap = @{}
-                            $objs=@()
-                            ($content -replace '(?s)<#.*?#>','' -replace '#.*','' -replace '\s','').ToCharArray() | %{
-                                                                                                                       $key = $_.ToString().ToUpper()
-                                                                                                                       $characterMap[$key] = 1 + $characterMap[$key] }
 
-                            $total = ($characterMap.GetEnumerator() | Measure-Object -sum Value).Sum
-                            $characterMap.GetEnumerator() | Sort-Object -desc value | % {                            
-                                                                                        $objs+= CreateObj -key $_.Name -val (([Math]::Round($_.Value / $total * 100, 3)).tostring())
-                                                                                        }
-                            return($objs)
-                      }
+#!!!  Допилить функцию, проверить структуру xml  - другой лог TSRemoteConnection
 
-function Get-EntropyMaxChar {
-                             param($Content)
-                             $ent_obj=Get-Entropy -Content $Content
-                             $ent_max=($ent_obj| %{$_.val |Sort-Object -Descending})[0]
-                             $char=($ent_obj|?{$_.val -eq $ent_max}|%{$_.key}) -join ","
-                             return($char)
+function Core_CreateXpathTable {param(
+                        $RulesFullObj,
+                        #Путь к папке c lastposition
+                        $LPPath,
+                        #Параметры для формирования xpath
+                        $xp_StartTime=$null,
+                        $xp_EndTime=$null,
+                        $xp_LastNMin=$null,
+                        $xp_LastNHour=$null,
+                        $xp_LastNDay=$null
+                        )
+                        $tmpObj=@()
+                        $Table=@()
+                        foreach($iRO in $RulesFullObj){$iRO|%{$_.EventID}|%{$tmpObj+=Core_CreateNewObj -key $iRO.Channel -val $_}}
+                        foreach($itmpObj in ($tmpObj| Sort-Object -Unique key, val|Group-Object key)){ 
+                                                                                                       #Проверяем как будем проводить выборку: по последней позиции или за промежуток времени
+                                                                                                       if(($xp_StartTime -or $xp_EndTime -or $xp_LastNMin -or $xp_LastNHour -or $xp_LastNDay) -eq $null){$LastPosition=$null}
+                                                                                                       else{$LastPosition = GetLastPosition -lppath $LPPath -channel $_.name}
+                                                                            
+                                                                                  $itmpObj.group| %{
+                                                                                  write-host $_.val
+                                                                                  $q=create_xpath -Log $itmpObj.name -id $_.val -RecID $LastPosition  -starttime $xp_StartTime -endtime $xp_EndTime -lastNMin $xp_LastNMin -lastNHour $xp_LastNHour -lastNDay $xp_LastNDay
+                                                                                  $Table+=$_.val
+                                                                                  }
+                                                                                  
+                                                                            }
+                        $tmpObj=$null
+                        Return $Table
+
 
 }
+Core_XpathTable -RulesFullObj (GetRule2Obj -path c:\rules) -LPPath C:\Rules\lp
 
-#Get-EntropyMaxChar -Content "vvvaryhlkkmm.k"
+#################################################################
+
+
+
+
+
+
 
 function evt_to_obj {
                     Param( 
@@ -205,21 +274,16 @@ function evt_to_obj {
 
 }
 
-#Get-WinEvent -LogName security -MaxEvents 1 | %{evt_to_obj -data $_} | %{ConvertTo-Json $_}
+#Get-WinEvent -LogName security -MaxEvents 1 | %{evt_to_obj -data $_} | %{Core_ConvertToJson $_}
 
-function LengthText {
-                        param($text)
-                        ([regex]::match($text, ".+")).Length
-                     }
-                     
-#LengthText -text "aGVsbG8gd29ybGQ="
+
 
 function GetRule2Obj {
                         param ($path)
                         # путь к каталогу где хранятся правила c:\rules
                         if(Test-Path $path){
                                             if(([regex]::Match($path,"\\$")).Success -eq $false){$path=$path+"\"}
-                                            return ((Get-ChildItem -path 'C:\Rules\*.*' -Recurse | %{ConvertFrom-Json -item (Get-Content -path $_.FullName)}))
+                                            return ((Get-ChildItem -path ($path + '*.*') | %{Core_ConvertFromJson -item (Get-Content -path $_.FullName)})) # вернуть рекурсию -Recurse
                                            } 
                   
                         else{return "error"}                    
@@ -228,52 +292,15 @@ function GetRule2Obj {
 }
 #GetRule2Obj -path c:\rules
 
-function CreateObj {
-                    param(
-                          $key_name="Key",
-                          $key,
-                          $val_name="Val",
-                          $val
-                            )
-                            
-                    $obj = New-Object -TypeName PSObject
-                    $obj|Add-Member -MemberType NoteProperty -Name $key_name -Value $key
-                    $obj|Add-Member -MemberType NoteProperty -Name $val_name -Value $val
-                    return $obj
-}
 
 
-#function GetLastPosition {param()}
-
-
-function core {
-              param(
-              #Путь к папке с правилами
-              $RulesFolder,
-              #Параметры для формирования xpath
-              $xp_StartTime=$null,
-              $xp_EndTime=$null,
-              $xp_LastNMin=$null,
-              $xp_LastNHour=$null,
-              $xp_LastNDay=$null,
-              
-                    )
-              #Проверяем как будем проводить выборку: по последней позиции или за промежуток времени
-              $LastPosirion="RecID"
-              if(($xp_StartTime -or $xp_EndTime -or $xp_LastNMin -or $xp_LastNHour -or $xp_LastNDay) -ne $null){$LastPosirion="DT"}else{$LastPosirion="RecID"}
-
-              $RulesObj = GetRule2Obj -path $RulesFolder
-              
-              # сортируем правила для первичной выборки log-eventid
-              # создаем объект с уникальными значениями
-              
-              $xpf=@()
-              
-              foreach($irulesObj in $rulesObj){$irulesObj | %{$_.EventID} |% { $xpf+=CreateObj -key $irulesObj.Channel -val $_}}
-              $xpf | sort-object key, val -Unique | Group-Object key | %{create_xpath -Log $_.name -id ($_.group| %{$_.val})
-                                                                          
-                                                                         }
-               
-}
-
-core -rulepath c:\rules
+function GetLastPosition {
+                          param(
+                                $LPPath,
+                                $Channel
+                                )
+                                if(([regex]::Match($LPPath,"\\$")).Success -eq $false){$LPPath=$LPPath+"\"}
+                                $text=Get-Content -Path ($LPPath+$Channel+".txt") -ErrorAction SilentlyContinue
+                                if($text){return $text}else{return $null}
+                                }
+#GetLastPosition -lppath C:\Rules\lp -channel Security
