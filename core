@@ -72,7 +72,7 @@ function Core_GetRate {
 
                             $total = ($characterMap.GetEnumerator() | Measure-Object -sum Value).Sum
                             $characterMap.GetEnumerator() | Sort-Object -desc value | % {                            
-                                                                                        $objs+= Core_CreateNewObj -key $_.Name -val (([Math]::Round($_.Value / $total * 100, 3)).tostring())
+                                                                                        $objs+= Core_CreateNewObj2 -Columns Char,Rate -Values $_.Name, (([Math]::Round($_.Value / $total * 100, 3)).tostring())
                                                                                         }
                             return($objs)
                       }
@@ -125,18 +125,22 @@ function Core_DTParser{
 # функция->объект
 #####################################
 
-function  Core_CreateNewObj {
+function  Core_CreateNewObj2 {
                              param(
-                             $key_name="Key",
-                             $key,
-                             $val_name="Val",
-                             $val
+                             $Columns,
+                             $Values
+                             
                              )
                             
                              $obj = New-Object -TypeName PSObject
-                             $obj|Add-Member -MemberType NoteProperty -Name $key_name -Value $key
-                             $obj|Add-Member -MemberType NoteProperty -Name $val_name -Value $val
+                             $count=0
+                             $Columns|%{
+                             $key=$Values[$count]
+                             $obj|Add-Member -MemberType NoteProperty -Name $_ -Value $key
+                             $count+=1
+                             }
                              return $obj
+
 }
 
 ######################################
@@ -205,12 +209,10 @@ function Core_CreateXpath {
 return($q)                                             
 }
 
-Core_CreateXpath -Log security -id 4624,4625  
+#Core_CreateXpath -Log security -id 4624,4625  
 
-
-#!!!  Допилить функцию, проверить структуру xml  - другой лог TSRemoteConnection
-
-function Core_CreateXpathTable {param(
+function Core_CreateXpathTable {
+                                param(
                         $RulesFullObj,
                         #Путь к папке c lastposition
                         $LPPath,
@@ -223,32 +225,27 @@ function Core_CreateXpathTable {param(
                         )
                         $tmpObj=@()
                         $Table=@()
-                        foreach($iRO in $RulesFullObj){$iRO|%{$_.EventID}|%{$tmpObj+=Core_CreateNewObj -key $iRO.Channel -val $_}}
-                        foreach($itmpObj in ($tmpObj| Sort-Object -Unique key, val|Group-Object key)){ 
+                        foreach($iRO in $RulesFullObj){$iRO|%{$_.EventID}|%{$tmpObj+=Core_CreateNewObj2 -Columns LogName,EventId -Values $iRO.Channel, $_}}
+                        
+                        foreach($itmpObj in ($tmpObj| Sort-Object -Unique LogName,EventId|Group-Object LogName)){ 
                                                                                                        #Проверяем как будем проводить выборку: по последней позиции или за промежуток времени
                                                                                                        if(($xp_StartTime -or $xp_EndTime -or $xp_LastNMin -or $xp_LastNHour -or $xp_LastNDay) -eq $null){$LastPosition=$null}
                                                                                                        else{$LastPosition = GetLastPosition -lppath $LPPath -channel $_.name}
                                                                             
-                                                                                  $itmpObj.group| %{
-                                                                                  write-host $_.val
-                                                                                  $q=create_xpath -Log $itmpObj.name -id $_.val -RecID $LastPosition  -starttime $xp_StartTime -endtime $xp_EndTime -lastNMin $xp_LastNMin -lastNHour $xp_LastNHour -lastNDay $xp_LastNDay
-                                                                                  $Table+=$_.val
-                                                                                  }
-                                                                                  
-                                                                            }
+                                                                                                       $itmpObj.group| %{
+                                                                                                                        $q=Core_CreateXpath -Log $itmpObj.name -id $_.EventId -RecID $LastPosition  -starttime $xp_StartTime -endtime $xp_EndTime -lastNMin $xp_LastNMin -lastNHour $xp_LastNHour -lastNDay $xp_LastNDay
+                                                                                                                        $Table+=Core_CreateNewObj2 -Columns LogName, EventId, Query -Values $itmpObj.name, $_.EventId, $q
+                                                                                                                        }
+                                                                                                     }
                         $tmpObj=$null
-                        Return $Table
+                        Return ($Table)
+
 
 
 }
-Core_XpathTable -RulesFullObj (GetRule2Obj -path c:\rules) -LPPath C:\Rules\lp
+Core_CreateXpathTable -RulesFullObj (GetRule2Obj -path c:\rules) -LPPath C:\Rules\lp | ft -AutoSize
 
 #################################################################
-
-
-
-
-
 
 
 function evt_to_obj {
@@ -304,3 +301,8 @@ function GetLastPosition {
                                 if($text){return $text}else{return $null}
                                 }
 #GetLastPosition -lppath C:\Rules\lp -channel Security
+
+
+
+($evt.SelectSingleNode("//*[@Name='TargetUserSid']")).'#text' # system, sec
+($evt.GetElementsByTagName("Address"))|%{$_.'#text'}
